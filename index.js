@@ -1,9 +1,9 @@
-var SNS = require("./Services/notifications/SNS");
-var SQS = require("./Services/notifications/SQS");
-var Redis = require("./Services/cache/Redis");
-var S3 = require("./Services/storage/S3");
-var Dynamo = require("./Services/DataBase/DynamoDB");
-var KMS = require("./Services/secret/Kms");
+const SNS = require("./Services/notifications/SNS");
+const SQS = require("./Services/notifications/SQS");
+const Redis = require("./Services/cache/Redis");
+const S3 = require("./Services/storage/S3");
+const Dynamo = require("./Services/DataBase/DynamoDB");
+const KMS = require("./Services/secret/Kms");
 
 const {
   getIndex,
@@ -17,10 +17,14 @@ const {
 } = require("./Services/search/ElasticSearch");
 
 exports.SNS_Post = function(snsURL, payload, subject, region, callback) {
-  new SNS(region).post(snsURL, payload, subject, function(err, data) {
-    callback(err, data);
-  });
+  new SNS(region).post(snsURL, payload, subject)
+    .then(data => callback(null, data))
+    .catch(error => callback(error, null))
 };
+
+exports.snsPostPromise = 
+  async (snsURL, payload, subject, region) => 
+    new SNS(region).post(snsURL, payload, subject)
 
 exports.SQS_Get = function(queueURL, region, callback) {
   new SQS(region).get(queueURL, function(err, data) {
@@ -80,36 +84,52 @@ exports.Redis_Delete = function(key, host, port, callback) {
 };
 
 exports.S3_Get = function(bucket, key, callback) {
-  new S3().get(bucket, key, function(err, data) {
-    callback(err, data);
-  });
+  new S3().get(bucket, key)
+    .then(data => callback(null, data))
+    .catch(error => callback(error, null))
 };
+
+exports.s3GetPromise = async(bucket,key) => new S3().get(bucket,key)
 
 exports.S3_Put = function(bucket, key, param, callback) {
-  new S3().put(bucket, key, param, function(err, data) {
-    callback(err, data);
-  });
+  new S3().put(bucket, key, param)
+    .then(data => callback(null, data))
+    .catch(error => callback(error, null))
 };
+
+exports.s3PutPromise = async(bucket, key, param) => new S3().put(bucket, key, param)
 
 exports.S3_PutObject = function(param, callback) {
-  new S3().putObject(param, function(err, data) {
-    callback(err, data);
-  });
+  new S3().putObject(param)
+    .then(data => callback(null, data))
+    .catch(error => callback(error, null))
 };
+
+exports.s3PutObjectPromise = async(param) => new S3().putObject(param)
 
 exports.S3_Upload = function(param, callback) {
-  new S3().upload(param, callback);
+  new S3().upload(param)
+    .then(data => callback(null, data))
+    .catch(error => callback(error, null))
 };
+
+exports.s3UploadPromise = async(param) =>  new S3().upload(param);
 
 exports.S3_DeleteObject = function (bucket, pathFileName, callback) {
-  new S3().delete(bucket, pathFileName, function (err, data) {
-    callback(err, data);
-  });
+  new S3().delete(bucket, pathFileName)
+    .then(data => callback(null, data))
+    .catch(error => callback(error, null))
 };
 
+exports.s3DeleteObject = async(bucket, pathFileName) => new S3().delete(bucket, pathFileName)
+
 exports.S3_ListObjects = function (bucket, directory, callback) {
-  new S3().listObjects(bucket, directory, callback);
+  new S3().listObjects(bucket, directory)
+    .then(data => callback(null, data))
+    .catch(error => callback(error, null))
 };
+
+exports.s3ListObjects = async(bucket, directory) => new S3().listObjects(bucket, directory)
 
 exports.Dynamo_Delete = function(object, region, callback) {
   new Dynamo(region).delete(object, function(err, data) {

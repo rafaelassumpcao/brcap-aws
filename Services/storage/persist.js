@@ -1,16 +1,20 @@
 const storage = require('node-persist');
-const EventEmitter = require('')
 const util = require('util');
 const setTimeoutPromise = util.promisify(setTimeout);
 
 module.exports = class RetrySNS  {
-    constructor(config) {
+    constructor({
+        maxRetries=5,
+        bufferMaxLimit,
+        startTime,
+        storage,
+    }) {
         this.maxRetries = maxRetries;
         this.isOnPanic = true;
-        this.repository = new Repository({bufferMaxLimit})
+        this.repository = new Repository({ bufferMaxLimit, storage })
+        this.handleRetryStrategy = this.constructExponentialBackoffStrategy(startTime);
     }
-  
-   
+
 
     async saveError(data) {
         await this.repository.save(data);
@@ -20,8 +24,9 @@ module.exports = class RetrySNS  {
         }
     }
 
-    retry() {
+    async retry() {
        const { key, messages } =  await this.repository.pull();
+       console.log(key);
     }
 
     getExponentialBackoff(startTimeInSeconds,attempts) {
@@ -38,18 +43,21 @@ module.exports = class RetrySNS  {
 }
 
 class Repository {
-    constructor({bufferMaxLimit=500}) {
+    constructor({bufferMaxLimit=500, storage }) {
         this.inMemoryData = [];
-        this.storage = null;
         this.bufferMaxLimit = bufferMaxLimit;
         this.key = 1n;
         this.keysFileSystem = []
 
     }
 
-    async createFileSystem(config){
-        this.storage = await storage.create(config);
-        return this;
+    static createFileSystem(config){
+        try {
+            this.storage = storage.create(config);
+            console.log(`Retryable storage created at ${storage}`)
+        } catch (error) {
+            console.log(`No local storage was created duo to some error: ${error.message}`)
+        }  
     }
 
     async save(data) {
@@ -74,3 +82,8 @@ class Repository {
         }
     }
 }
+
+Repository.createFileSystem({
+    dir: 'brcap/sns',
+    logging: true,
+})

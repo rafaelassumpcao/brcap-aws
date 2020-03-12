@@ -1,59 +1,55 @@
 // Load the AWS SDK for Node.js
-var AWS = require('aws-sdk');
+const AWS = require('aws-sdk');
+const { isInvalidInput } = require('../../utils');
 
-var s3;
+const s3 = new AWS.S3({apiVersion: '2006-03-01'});
 
 module.exports = class S3 {
 
     constructor() {
-        this.s3 = new AWS.S3();
+        this.s3 = s3;
     }
 
-    get(bucket, key, callback) {
-        if (bucket === undefined || bucket === null || bucket === '') {
-            callback("bucket missing or in a invalid state.", null);
-        } else if (key === undefined || key === null || key === '') {
-            callback("key missing or in a invalid state.", null);
-        } else {
-            var params = {
-                Bucket: bucket,
-                Key: key
-            };
-            this.s3.getObject(params, function (err, data) {
-                callback(err, data);
-            });
+    get(bucket, key) {
+        if(isInvalidInput([bucket, key])) {
+            return Promise.reject("bucket or key missing or in a invalid state.")
         }
+
+        return this.s3.getObject({
+            Bucket: bucket,
+            Key: key
+        }).promise();
     }
 
-    put(bucket, key, param, callback) {
+    put(bucket, key, param) {
         const params = {
             Bucket: bucket,
             Key: key,
             Body: JSON.stringify(param)
         };
-        this.s3.putObject(params, (err, data) => callback(err, data));
+       return this.s3.putObject(params).promise();
     }
 
-    putObject(params, callback) {
-        this.s3.putObject(params, (err, data) => callback(err, data));
+    putObject(params) {
+        return this.s3.putObject(params).promise();
     }
 
-    upload(params, callback) {
-        this.s3.upload(params, (err, data) => callback(err, data));
+    upload(params) {
+        return this.s3.upload(params).promise();
     }
 
-    delete(bucket, pathFileName, callback) {
+    delete(bucket, pathFileName) {
         const params = {
             Bucket: bucket,
             Key: pathFileName,
         };
-        this.s3.deleteObject(params, (err, data) => callback(err, data));
+        return this.s3.deleteObject(params).promise();
     }
 
-    listObjects(bucket, directory, callback) {
-        this.s3.listObjectsV2({
+    listObjects(bucket, directory) {
+       return this.s3.listObjectsV2({
             Bucket: bucket,
             Prefix: directory,
-        }, callback);
+        }).promise();
     }
 }
