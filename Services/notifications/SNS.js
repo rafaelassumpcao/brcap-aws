@@ -3,7 +3,7 @@ const AWS = require('aws-sdk');
 const storage = require('node-persist');
 const S3 = require('../storage/S3');
 const RetrySNS = require('../storage/persist');
-const retry = new RetrySNS();
+
 //const s3 = new S3();
 const { isInvalidInput } = require('../../utils');
 
@@ -14,6 +14,7 @@ const sns = new AWS.SNS({
     region: 'sa-east-1',
     correctClockSkew: true,
 })
+const retry = new RetrySNS({sns});
 
 const bucketQueueMonitor = "brasilcap-sns-history-notification";
 
@@ -41,7 +42,7 @@ module.exports = class SNS {
             Subject: subject,
         }
         try {
-                const data =  await this.sns.publish().promise();
+                const data =  await this.sns.publish(params).promise();
     
             const path = snsURL +"/"+now.getFullYear() +"-"+parseInt(now.getMonth()+1)+"-"+now.getDate()+"/"+now.getHours()+":"+now.getMinutes()+":"+now.getSeconds()+" - "
 
@@ -52,7 +53,7 @@ module.exports = class SNS {
             );
             console.log("BRCAP-AWS: dados gravados no S3.");
         } catch (error) {
-            retry.saveError();
+            retry.saveError(params);
         }
         
     }
