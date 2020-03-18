@@ -10,7 +10,7 @@ const log = console.log
 
 module.exports = class RetrySNS {
     constructor({
-        maxRetries,
+        maxRetries=5,
         bufferMaxLimit,
         startTime,
         sns
@@ -19,6 +19,8 @@ module.exports = class RetrySNS {
     }) {
         this.sns = sns
         this.maxRetries = maxRetries;
+        this.retryCounter = maxRetries;
+        this.startTime = startTime;
         this.isOnPanic = true;
         this.repository = new Repository({ bufferMaxLimit, storage })
         this.handleRetryStrategy = constructExponentialBackoffStrategy(startTime);
@@ -29,8 +31,7 @@ module.exports = class RetrySNS {
         await this.repository.save(data);
         if(this.isOnPanic) {
             this.isOnPanic = false;
-            setTimeoutPromise(this.handleRetryStrategy(), {})
-                .then(this.retry.bind(this))
+            this.retryScheduler();
         }
     }
 
@@ -38,28 +39,47 @@ module.exports = class RetrySNS {
         // take a snapshot of messages to retry
        const pullFromSnapShot = await this.repository.pull();
        for await (const { key, messages, done } of pullFromSnapShot()) {
+           
             if(done) {
                 this.isOnPanic = true;
                 break;
             }
             let toUpdateOnFail;
-            // TODO: terminar essa logica doida aqui
+
             try {
                 for await(const data of messages) {
                     toUpdateOnFail = messages;
                     console.log(`Retrying to publish the message: ${JSON.stringify(data,null,2)}`)
-                    await this.sns.puplish(data).promise();
+                    await this.sns.publish(data).promise();
                     messages.shift();
                     console.log(`Message Ok`);
                 }
-                this.repository.clean(key);
+                await this.repository.clean(key)
+                ean(key);
             } catch (error) {
-                await this.repository.updateOnFail(key, messages)
+                if(isInMemoryData) {
+
+                }
+                await this.repository.updateOnFail(key, toUpdateOnFail);
+                this.isOnPanic = true;
+                this.retryScheduler();
             }
            
             // chunkify(messages,4, true)
             
        }
+    }
+
+    async retryScheduler() {
+        this.retryCounter--;
+        if(this.retryCounter >= 0) {
+            setTimeoutPromise(this.handleRetryStrategy(), {})
+                    .then(this.retry.bind(this))
+            return false;
+        }
+        this.retryCounter = this.maxRetries;
+        this.handleRetryStrategy = constructExponentialBackoffStrategy(this.startTime);
+        return true;
     }
 
     
@@ -101,13 +121,13 @@ class Repository {
             memory:[...this.inMemoryData.slice(-this.bufferMaxLimit)], // muta a referencia em memoria, mas nao guarda com o objeto
             fsKeys: [...this.keysFileSystem.slice(-100)] // garantir que vai pegar tudo do fs
         }
-        log(`snapShot: ${JSON.stringify(snapShot, null, 2)}`)
+        // log(`snapShot: `)
         return async function*() {
             const { memory, fsKeys } = snapShot; 
             while(memory.length && fsKeys.length) {
                 if(snapShot.memory.length) {
                     const data = { 
-                        key: 0, 
+                        key: "0", 
                         messages: [...snapShot.memory], 
                         done:false 
                     };
@@ -129,10 +149,15 @@ class Repository {
     }
 
     async updateOnFail(key, messages) {
+        // is in memory data?
+        if(key === '0') {
+            return this.inMemoryData.push(...messages)
+        }
         await storage.updateItem(key, messages);
     }
 
-    clean(key) {
+    async clean(key) {
+        if(key === '0') return;
         await storage.removeItem(key);
         console.log(`Key: ${key} was removed`);
     }
