@@ -1,12 +1,8 @@
-// Load the AWS SDK for Node.js
 const AWS = require('aws-sdk');
-const storage = require('node-persist');
+
+const RetrySNS = require('./RetrySNS');
 const S3 = require('../storage/S3');
-const RetrySNS = require('../storage/persist');
-
-//const s3 = new S3();
 const { isInvalidInput } = require('../../utils');
-
 
 const sns = new AWS.SNS({ 
     apiVersion: '2012-11-05', 
@@ -14,7 +10,7 @@ const sns = new AWS.SNS({
     region: 'sa-east-1',
     correctClockSkew: true,
 })
-const retry = new RetrySNS({sns});
+const retry = new RetrySNS({ sns, logging: true });
 
 const bucketQueueMonitor = "brasilcap-sns-history-notification";
 
@@ -36,13 +32,13 @@ module.exports = class SNS {
         const randomId = Math.floor(new Date().valueOf() + (Math.random() * Math.random()));
         payload.QueueMonitorId = randomId;
         const params = {
-            Message: JSON.stringify(payload),
-            MessageStructure: 'text',
-            TargetArn: snsURL,
-            Subject: subject,
+            "Message": JSON.stringify(payload),
+            "MessageStructure": 'text',
+            "TargetArn": snsURL,
+            "Subject": subject,
         }
         try {
-                const data =  await this.sns.publish(params).promise();
+            const data =  await this.sns.publish(params).promise();
     
             const path = snsURL +"/"+now.getFullYear() +"-"+parseInt(now.getMonth()+1)+"-"+now.getDate()+"/"+now.getHours()+":"+now.getMinutes()+":"+now.getSeconds()+" - "
 
@@ -55,6 +51,5 @@ module.exports = class SNS {
         } catch (error) {
             retry.saveError(params);
         }
-        
     }
 }
