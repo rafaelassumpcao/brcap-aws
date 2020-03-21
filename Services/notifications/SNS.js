@@ -10,7 +10,7 @@ const sns = new AWS.SNS({
     region: 'sa-east-1',
     correctClockSkew: true,
 })
-const retry = new RetrySNS({ sns, logging: true });
+const retry = new RetrySNS({ sns, logging: false });
 
 const bucketQueueMonitor = "brasilcap-sns-history-notification";
 
