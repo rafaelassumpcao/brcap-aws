@@ -2,7 +2,7 @@ const AWS = require('aws-sdk');
 
 const RetrySNS = require('./RetrySNS');
 const S3 = require('../storage/S3');
-const { isInvalidInput } = require('../../utils');
+const { isInvalidInput, to } = require('../../utils');
 
 const sns = new AWS.SNS({ 
     apiVersion: '2012-11-05', 
@@ -10,7 +10,7 @@ const sns = new AWS.SNS({
     region: 'sa-east-1',
     correctClockSkew: true,
 })
-const retry = new RetrySNS({ sns, logging: false });
+const retry = new RetrySNS({ sns, logging: true });
 
 const bucketQueueMonitor = "brasilcap-sns-history-notification";
 
@@ -37,19 +37,20 @@ module.exports = class SNS {
             "TargetArn": snsURL,
             "Subject": subject,
         }
-        try {
-            const data =  await this.sns.publish(params).promise();
-    
-            const path = snsURL +"/"+now.getFullYear() +"-"+parseInt(now.getMonth()+1)+"-"+now.getDate()+"/"+now.getHours()+":"+now.getMinutes()+":"+now.getSeconds()+" - "
+        const [error, data] =  await to(this.sns.publish(params).promise());
 
-            await new S3().put(
-                bucketQueueMonitor, 
-                path+randomId.toString(), 
-                payload,
-            );
-            console.log("BRCAP-AWS: dados gravados no S3.");
-        } catch (error) {
-            retry.saveError(params);
+        if(error) {
+            
+            return retry.saveError(params)
         }
+
+        const path = snsURL +"/"+now.getFullYear() +"-"+parseInt(now.getMonth()+1)+"-"+now.getDate()+"/"+now.getHours()+":"+now.getMinutes()+":"+now.getSeconds()+" - "
+
+        await new S3().put(
+            bucketQueueMonitor, 
+            path+randomId.toString(), 
+            payload,
+        );
+        console.log("BRCAP-AWS: dados gravados no S3.");
     }
 }

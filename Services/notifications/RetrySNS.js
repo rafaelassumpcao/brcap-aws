@@ -1,11 +1,13 @@
 const createRepository = require('../storage/LocalStorage');
-const { 
+const {
+    to,
     sleep,
     createLog,
     getExponentialBackoff, 
 } = require('../../utils')
 
 const diretory = 'app/local-storage';
+const info = console.log.bind(null, '[brcap-aws] - ')
 
 const defaultObject = {
     maxRetries:5,
@@ -17,7 +19,7 @@ const defaultObject = {
 module.exports = class RetrySNS {
     constructor({
         maxRetries=5,
-        bufferMaxLimit=3000,
+        bufferMaxLimit=1500,
         startTime=15,
         logging,
         dir=diretory,
@@ -26,7 +28,6 @@ module.exports = class RetrySNS {
         this.sns = sns
         this.maxRetries = maxRetries;
         this.retryCounter = 0;
-        this.log = createLog(logging)
         this.timer = null;
         this.repository = createRepository({ 
             bufferMaxLimit,
@@ -36,39 +37,31 @@ module.exports = class RetrySNS {
         this.handleRetryStrategy = getExponentialBackoff.bind(null, startTime);
     }
 
-    async saveError(data) {
-        if(this.timer) {
-            clearTimeout(this.timer)
-        }
-        this.timer = this.retryScheduler();
+   async saveError(data,opts={attempt: 0}) {
+        info(
+            `Notificao de sns encontrou um erro. Reenvio em ${this.startTime}s`
+        );
+        clearTimeout(this.timer)
+        this.timer = this.retryScheduler(opts.attempt);
         await this.repository.save(data);
     }
 
-    async retry(val) {
-        // take a snapshot of messages to retry
-       const pullFromSnapShot = await this.repository.pull();
-       for await (const { key, messages, done } of pullFromSnapShot()) {
+    async retry() {       
+       for await (const { key, messages, done } of this.repository.pull()) {
             if(done) {
+                info('Mensagens reenviadas')
                 break;
             }
-            const map = new Map(Object.entries(messages));
+            const map = new Map(messages);
             try {
                 for await(const [keyMap,data] of map.entries()) {
-                    //console.log(`Retrying to publish the message: ${JSON.stringify(data,null,2)}`)
                     await this.sns.publish(data).promise();
                     map.delete(keyMap);
-                    this.log(`Key ${keyMap} from Pack: ${key} was removed`)
-                    await sleep(0.06)
                 }
-                await this.repository.clean(key)
+                await this.repository.clean(key, map)
             } catch (error) {
-                this.log(`Erro: ${error.message}`)
-                await this.repository.updateOnFail(
-                    key, 
-                    [...map.values()],
-                    map.size !== messages.length
-                );
-                this.time = this.retryScheduler(++this.retryCounter);
+                info('Ocorreu um erro durante reenvio. Tentando novamente')
+                await this.saveError(map, { attempt: ++this.retryCounter })
                 break;
             }
        }

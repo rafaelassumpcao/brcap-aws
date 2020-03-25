@@ -16,5 +16,10 @@ module.exports = {
         return logging 
             ? (logMessage) => console.log(logMessage)
             : _ => _
+    },
+    to(promise) {
+        return promise
+                .then(data => [null, data])
+                .catch(error => [error])
     }
 }

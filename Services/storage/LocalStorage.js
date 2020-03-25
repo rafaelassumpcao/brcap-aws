@@ -1,13 +1,13 @@
 const storage = require('node-persist');
+const { v4: uuidv4 } = require('uuid');
 
 const { sleep, createLog } = require('../../utils')
 
 class Repository {
     constructor(config) {
-        this.inMemoryData = [];
+        this.inMemoryData = new Map();
         this.bufferMaxLimit = config.bufferMaxLimit;
         this.key = 1n;
-        this.log = createLog(true);
     }
 
     createStorage(config) {
@@ -22,70 +22,61 @@ class Repository {
     }
 
     async save(data) {
-        // await sleep(0.12)
-        this.inMemoryData.push(data);
-        if(this.inMemoryData.length > this.bufferMaxLimit) {
-            this.pushToFileSystem();
+        this.inMemoryData = (data instanceof Map) 
+            ? new Map([...this.inMemoryData, ...data])
+            : this.inMemoryData.set(uuidv4(),data);
+        
+        if(this.inMemoryData.size > this.bufferMaxLimit) {
+            await this.pushToFileSystem();
         }
     }
 
     async pushToFileSystem() {
-        const bufferCopy = [...this.inMemoryData];
-        this.inMemoryData=[];
-        await storage.setItem(`${this.key}`, bufferCopy);
+        await storage.setItem(`${this.key}`, Object.fromEntries([...this.inMemoryData]));
+        this.inMemoryData.clear();
         this.key++;
     }
 
-    async pull() {
-        // create a snapshot from memory and file system state
-        const snapShot = {
-            memory:[...this.inMemoryData.splice(-this.bufferMaxLimit)],
-            fsKeys: await storage.keys()
-        }
-        // each call pulls out one block of message
-        return async function*() {
-            while(snapShot.memory.length || snapShot.fsKeys.length) {
-                // pull out from memory (Buffer)
-                if(snapShot.memory.length) {
-                    const data = { 
-                        key: "0", // position 0 reserved for memory access
-                        messages: [...snapShot.memory], 
-                        done:false 
-                    };
-                    snapShot.memory=[];
-                    yield data;
-                    continue;
-                }
-                // pull out from filesystem
-                const filesystemMessages = await storage.getItem(snapShot.fsKeys[0]);
-                const fsData =  {
-                    key: snapShot.fsKeys[0],
-                    messages: filesystemMessages,
-                    done:false
-                }
-                snapShot.fsKeys.shift()
-                yield fsData;
+    async *pull() {
+        const fsKeys = await storage.keys();
+        while(this.inMemoryData.size || fsKeys.length) {
+            // pull out from memory (Buffer)
+            if(this.inMemoryData.size) {
+                const data = { 
+                    key: "0", // position 0 reserved for memory access
+                    messages: [...this.inMemoryData], 
+                    done:false 
+                };
+                this.inMemoryData.clear();
+                yield data;
+                continue;
             }
-            yield { done: true };
+            // pull out from filesystem
+            const filesystemMessages = await storage.getItem(fsKeys[0]);
+            const fsData =  {
+                key: fsKeys[0],
+                messages: Object.entries(filesystemMessages),
+                done:false
+            }
+            await storage.removeItem(fsKeys[0]);
+            fsKeys.shift()
+            yield fsData;
         }
-        
+        yield { done: true };
     }
 
-    async updateOnFail(key, messages, isNecessaryIO=true) {
-        this.log(`Updating on Fail - key: ${key}`)
+    async updateOnFail(key, messagesMap, isNecessaryIO=true) {
         if(key === '0') {
-            return this.inMemoryData.push(...messages)
+            return this.inMemoryData = new Map([...this.inMemoryData, ...messagesMap])
         }
         if(isNecessaryIO) {
-            await storage.updateItem(key, messages);
+           await storage.updateItem(key, Object.fromEntries([...messagesMap]));
         }
     }
 
-    async clean(key) {
-        this.log(`Cleaning key: ${key} (${key === '0' ? 'Memory':'Filesystem'})`)
+     async clean(key, map) {
         if(key === '0') return;
         await storage.removeItem(key);
-        this.log(`Key: ${key} was removed`);
     }
 }
 

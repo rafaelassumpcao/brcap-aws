@@ -1,3 +1,5 @@
+require('./pollyfill');
+
 const SNS = require("./Services/notifications/SNS");
 const SQS = require("./Services/notifications/SQS");
 const Redis = require("./Services/cache/Redis");
