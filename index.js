@@ -27,6 +27,12 @@ exports.SNS_Post = function(snsURL, payload, subject, region, callback) {
 exports.snsPostPromise = 
   async (snsURL, payload, subject, region) => 
     new SNS(region).post(snsURL, payload, subject)
+    
+exports.SNS_ListSubscriptionByTopic = function(snsURL, region, callback){
+  new SNS(region).listSubscriptionsByTopic(snsURL, function(err, data){
+    callback(err, data);
+    });
+};
 
 exports.SQS_Get = function(queueURL, region, callback) {
   new SQS(region).get(queueURL, function(err, data) {

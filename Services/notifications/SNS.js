@@ -53,4 +53,27 @@ module.exports = class SNS {
         );
         console.log("BRCAP-AWS: dados gravados no S3.");
     }
+
+    listSubscriptionsByTopic(snsURL, callback) {
+        let params = {
+            'TopicArn': snsURL
+        };
+
+        let items = [];
+
+        this.sns.listSubscriptionsByTopic(params, function (err, listSubscriptionData) {
+            if (err)
+                console.log(err, err.stack);
+            else
+                listSubscriptionData.Subscriptions.forEach(function (element) {
+                    if (element.Protocol == 'sqs') {
+                        let item = {
+                            'arn': element.Endpoint
+                        };
+                        items.push(item.arn);
+                    }
+                }, this);
+            callback(err, items);
+        });
+    }
 }
