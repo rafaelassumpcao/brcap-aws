@@ -2,11 +2,14 @@
 var AWS = require('aws-sdk');
 var sqs;
 
+const sqs = new AWS.SQS({ apiVersion: '2012-11-05', region: 'sa-east-1', httpOptions: { timeout: 25000 } });
 module.exports = class SQS {
 
     constructor(region) {
-        AWS.config.update({ region: region });
-        sqs = new AWS.SQS({ apiVersion: '2012-11-05', httpOptions: { timeout: 25000 } });
+        if (region && sqs.config.region !== region) {
+            sqs.config.update({ region });
+        }
+        this.sqs = sqs
     }
 
     get(queueURL, callback) {
@@ -30,21 +33,21 @@ module.exports = class SQS {
                 AttributeNames: ['All']
             };
 
-            sqs.getQueueAttributes(paramsForAttributes, function (err, queueData) {
+            this.sqs.getQueueAttributes(paramsForAttributes, function (err, queueData) {
 
                 if (err) {
                     console.log(err, err.stack);
                     callback(null, err.stack);
                 } else {
                     try {
-                        sqs.receiveMessage(params, function (err, data) {
+                        this.sqs.receiveMessage(params, function (err, data) {
                             try {
                                 if (data && data.Messages) {
                                     const retorno = {};
                                     const Message = JSON.parse(JSON.parse(data.Messages[0].Body).Message);
-    
+
                                     if (Message.QueueMonitorId) {
-    
+
                                         retorno.body = Message;
                                         retorno.receiptHandle = data.Messages[0].ReceiptHandle;
                                         retorno.code = 200;
@@ -52,14 +55,14 @@ module.exports = class SQS {
                                         retorno.messageId = Message.QueueMonitorId;
                                         retorno.subject = JSON.parse(data.Messages[0].Body).Subject;
                                         retorno.arn = queueData.Attributes.QueueArn;
-    
+
                                         callback(null, retorno);
                                     } else {
                                         retorno.body = Message;
                                         retorno.receiptHandle = data.Messages[0].ReceiptHandle;
                                         retorno.code = 200;
                                         retorno.message = 'message found';
-    
+
                                         callback(null, retorno);
                                     }
                                 } else {
@@ -68,7 +71,7 @@ module.exports = class SQS {
                             } catch (error) {
                                 callback({ 'code': 400, 'message': 'Mensagem inválida', 'error': error }, { 'code': 400 });
                             }
-                       
+
                         });
 
                     } catch (error) {
@@ -90,7 +93,7 @@ module.exports = class SQS {
                 QueueUrl: queueURL,
                 ReceiptHandle: receiptHandle
             };
-            sqs.deleteMessage(deleteParams, function (err, data) {
+            this.sqs.deleteMessage(deleteParams, function (err, data) {
                 callback(err, data);
             });
         }
@@ -114,7 +117,7 @@ module.exports = class SQS {
                 QueueUrl: queueURL,
                 ReceiptHandle: receiptHandle
             };
-            sqs.deleteMessage(deleteParams, function (err, data) {
+            this.sqs.deleteMessage(deleteParams, function (err, data) {
                 callback(err, data);
             });
         }
@@ -124,7 +127,7 @@ module.exports = class SQS {
         var params = {};
         var retorno = [];
         var count = 0;
-        sqs.listQueues(params, function (err, listQueueData) {
+        this.sqs.listQueues(params, function (err, listQueueData) {
             if (err) {
                 console.log(err, err.stack);
             } else {
@@ -135,7 +138,7 @@ module.exports = class SQS {
                             QueueUrl: element,
                             AttributeNames: ['QueueArn']
                         };
-                        sqs.getQueueAttributes(params, function (err, queueAttributesData) {
+                        this.sqs.getQueueAttributes(params, function (err, queueAttributesData) {
                             if (err) {
                                 console.log(err, err.stack);
                                 callback(err, retorno);
