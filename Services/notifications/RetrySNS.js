@@ -3,41 +3,41 @@ const {
     to,
     sleep,
     createLog,
-    getExponentialBackoff, 
+    getExponentialBackoff,
 } = require('../../utils')
 
 const diretory = 'app/local-storage';
 const info = console.log.bind(null, '[brcap-aws] - ')
 
 const defaultObject = {
-    maxRetries:5,
+    maxRetries: 5,
     startTime: 15,
-    dir:diretory,
+    dir: diretory,
     bufferMaxLimit: 3000
 }
 
 module.exports = class RetrySNS {
     constructor({
-        maxRetries=5,
-        bufferMaxLimit=1500,
-        startTime=15,
+        maxRetries = 5,
+        bufferMaxLimit = 1500,
+        startTime = 15,
         logging,
-        dir=diretory,
+        dir = diretory,
         sns
     } = defaultObject) {
         this.sns = sns
         this.maxRetries = maxRetries;
         this.retryCounter = 0;
         this.timer = null;
-        this.repository = createRepository({ 
+        this.repository = createRepository({
             bufferMaxLimit,
-            logging, 
+            logging,
             dir
         })
         this.handleRetryStrategy = getExponentialBackoff.bind(null, startTime);
     }
 
-   async saveError(data,opts={attempt: 0}) {
+    async saveError(data, opts = { attempt: 0 }) {
         info(
             `Notificao de sns encontrou um erro. Reenvio em ${this.startTime}s`
         );
@@ -46,15 +46,15 @@ module.exports = class RetrySNS {
         await this.repository.save(data);
     }
 
-    async retry() {       
-       for await (const { key, messages, done } of this.repository.pull()) {
-            if(done) {
+    async retry() {
+        for await (const { key, messages, done } of this.repository.pull()) {
+            if (done) {
                 info('Mensagens reenviadas')
                 break;
             }
             const map = new Map(messages);
             try {
-                for await(const [keyMap,data] of map.entries()) {
+                for await (const [keyMap, data] of map.entries()) {
                     await this.sns.publish(data).promise();
                     map.delete(keyMap);
                 }
@@ -64,16 +64,16 @@ module.exports = class RetrySNS {
                 await this.saveError(map, { attempt: ++this.retryCounter })
                 break;
             }
-       }
+        }
     }
 
-    retryScheduler(attempt=0) {
-        if(this.maxRetries >= attempt) {
+    retryScheduler(attempt = 0) {
+        if (this.maxRetries >= attempt) {
             return global.setTimeout(
-                this.retry.bind(this), 
+                this.retry.bind(this),
                 this.handleRetryStrategy(attempt)
             );
         }
         this.retryCounter = 0;
-    }  
+    }
 }
